@@ -259,7 +259,7 @@ func HandleMTXv2(file *os.File, fileInfo fs.FileInfo, dryRun bool) error {
 	return nil
 }
 
-func ConvertMTXToPNG(file string, dryRun bool) error {
+func ExtractMTXFile(file string, dryRun bool) error {
 	log.Info(file)
 
 	// open file
