@@ -7,10 +7,10 @@ import (
 	"mtxconv/mtx"
 )
 
-// topngCmd represents the topng command
-var topngCmd = &cobra.Command{
-	Use:   "topng [PNG files to convert]",
-	Short: "Convert MTX to PNG",
+// extractCmd represents the extract command
+var extractCmd = &cobra.Command{
+	Use:   "extract [MTX files]",
+	Short: "Extract images from MTX files",
 
 	Args: cobra.MinimumNArgs(1),
 
@@ -26,7 +26,7 @@ var topngCmd = &cobra.Command{
 		}
 
 		for _, file := range args {
-			if err := mtx.ConvertMTXToPNG(file, dryRunEnabled); err != nil {
+			if err := mtx.ExtractMTXFile(file, dryRunEnabled); err != nil {
 				log.Error(err)
 			}
 			fmt.Println()
@@ -35,5 +35,5 @@ var topngCmd = &cobra.Command{
 }
 
 func init() {
-	rootCmd.AddCommand(topngCmd)
+	rootCmd.AddCommand(extractCmd)
 }
