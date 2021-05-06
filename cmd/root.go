@@ -12,6 +12,7 @@ var rootCmd = &cobra.Command{
 
 var (
 	debugModeEnabled bool
+	dryRunEnabled    bool
 )
 
 // Execute adds all child commands to the root command and sets flags appropriately.
@@ -23,5 +24,6 @@ func Execute() {
 func init() {
 	cobra.OnInitialize()
 
-	rootCmd.PersistentFlags().BoolVarP(&debugModeEnabled,"debug", "", false, "debug")
+	rootCmd.PersistentFlags().BoolVarP(&debugModeEnabled, "debug", "", false, "debug")
+	rootCmd.PersistentFlags().BoolVarP(&dryRunEnabled, "dry-run", "", false, "disables writing of output files. useful for testing")
 }

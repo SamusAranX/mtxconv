@@ -2,6 +2,9 @@
 /mtxconv
 /mtxconv.exe
 
+# test directory
+/test
+
 # JetBrains IDE stuff
 .idea/**/workspace.xml
 .idea/**/tasks.xml

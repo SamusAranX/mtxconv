@@ -2,15 +2,14 @@ package mtx
 
 import (
 	"bytes"
-	"compress/zlib"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"image"
-	"image/draw"
 	_ "image/jpeg"
 	"image/png"
 	"io"
-	"io/ioutil"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -18,208 +17,244 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func readSomeBytes(file *os.File, number int) []byte {
-	bytes := make([]byte, number)
+var (
+	pngEnc = png.Encoder{
+		CompressionLevel: png.BestSpeed,
+	}
+)
 
-	_, err := file.Read(bytes)
+func HandleMTXv0(file *os.File, fileInfo fs.FileInfo, dryRun bool) error {
+	// read MTX header
+	fileHeader, err := readHeaderV0(file)
 	if err != nil {
-		if err != io.EOF {
-			log.Fatal(err)
+		return err
+	}
+
+	// set up paths and file names for later
+	fileDir, fileBase := filepath.Split(file.Name())
+	fileBaseNoExt := strings.Split(fileBase, ".")[0]
+
+	// variables for use in the loop
+	var chunkData []byte
+	blockLengths := [2]int{
+		int(fileHeader.FirstImageLength),
+		int(fileHeader.SecondImageLength),
+	}
+
+	for i, length := range blockLengths {
+		imageIndex := i + 1
+
+		// create new file path
+		newOutFilePath := filepath.Join(fileDir, fmt.Sprintf("%s%d.jpg", fileBaseNoExt, imageIndex))
+
+		log.Infof("Extracting image %d…\n", imageIndex)
+
+		if chunkData, err = readSomeBytes(file, length); err != nil {
+			return err
+		}
+
+		if dryRun {
+			log.Debugf("Dry Run: skipping creation of %s", filepath.Base(newOutFilePath))
+		} else {
+			outImageFile, err := os.Create(newOutFilePath)
+			if err != nil {
+				return err
+			}
+
+			_, err = outImageFile.Write(chunkData)
+			if err != nil {
+				outImageFile.Close()
+				return err
+			}
+
+			outImageFile.Close()
 		}
 	}
 
-	return bytes
-}
-
-func readFileHeader(file *os.File) (*FileHeader, error) {
-	header := FileHeader{}
-	headerData := readSomeBytes(file, int(FILE_HEADER_SIZE))
-	headerBuf := bytes.NewBuffer(headerData)
-	err := binary.Read(headerBuf, binary.LittleEndian, &header)
-	if err != nil {
-		return nil, err
+	pos, _ := file.Seek(0, io.SeekCurrent)
+	if pos < fileInfo.Size() {
+		log.Warnf("There is additional data in the file after %d bytes!", pos)
 	}
 
-	return &header, nil
+	log.Info("Done.")
+
+	return nil
 }
 
-func readImageHeader(file *os.File) (*ImageHeader, error) {
-	header := ImageHeader{}
-	headerData := readSomeBytes(file, int(IMAGE_HEADER_SIZE))
-	headerBuf := bytes.NewBuffer(headerData)
-	err := binary.Read(headerBuf, binary.LittleEndian, &header)
-	if err != nil {
-		return nil, err
-	}
-
-	return &header, nil
-}
-
-func readDataChunk(file *os.File, chunkLen int) []byte {
-	chunkData := readSomeBytes(file, int(chunkLen))
-	return chunkData
-}
-
-func decompressZlibData(data []byte) ([]byte, error) {
-	b := bytes.NewReader(data)
-	z, err := zlib.NewReader(b)
-	if err != nil {
-		return nil, err
-	}
-	defer z.Close()
-
-	decompBytes, err := ioutil.ReadAll(z)
-	if err != nil {
-		return nil, err
-	}
-
-	return decompBytes, nil
-}
-
-func imageMaskFromRawData(data []byte, width int, height int) *image.Gray {
-	img := image.NewGray(image.Rectangle{
-		Min: image.Point{},
-		Max: image.Point{X: width, Y: height},
-	})
-	img.Pix = data
-	return img
-}
-
-func DoShit(shit ...interface{}) {
-
-}
-
-func ConvertMTXToPNG(file string) error {
-	log.Info(file)
-
+func HandleMTXv1(file *os.File, fileInfo fs.FileInfo, dryRun bool) error {
 	// set up paths and file names for later
-	fileDir, fileBase := filepath.Split(file)
+	fileDir, fileBase := filepath.Split(file.Name())
 	fileBaseNoExt := strings.Split(fileBase, ".")[0]
 
-	// prepare PNG encoder
-	pngEnc := png.Encoder{
-		CompressionLevel: png.BestSpeed,
-	}
+	// get file size for later
+	fileSize := fileInfo.Size()
 
-	// open file
-	f, err := os.Open(file)
+	// read MTX header
+	fileHeader, err := readHeaderV1(file)
 	if err != nil {
-		log.Fatal(err)
-	}
-	defer f.Close()
-
-	fi, err := f.Stat()
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	// parse file header
-	fileHeader, err := readFileHeader(f)
-	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	// do (optional?) size check
-	if fi.Size() - 12 != int64(fileHeader.SecondImageOffset + fileHeader.SizeCheck) {
-		log.Fatal("Size mismatch")
+	if fileSize-12 != int64(fileHeader.SecondBlockOffset+fileHeader.SizeCheck) {
+		return errors.New("size verification failed")
 	}
 
-	moreImagesAvailable := true
+	// setting up variables that are gonna be reused throughout the loop
+	var filePos int64
+	var chunkLength int
+	var chunkData []byte
+
 	imageIndex := 1
-	for moreImagesAvailable {
-		// create new file paths
-		// newColorPath := filepath.Join(fileDir, fmt.Sprintf("%s_color%d.jpg", fileBaseNoExt, imageIndex))
-		// newAlphaPath := filepath.Join(fileDir, fmt.Sprintf("%s_alpha%d.png", fileBaseNoExt, imageIndex))
+	for filePos < fileSize {
+		if imageIndex == 3 {
+			log.Warn("There is additional data after the expected two image blocks.")
+			log.Warn("Extraction will continue, but errors might occur.")
+		}
+
+		// create new file path
 		newOutFilePath := filepath.Join(fileDir, fmt.Sprintf("%s%d.png", fileBaseNoExt, imageIndex))
 
 		log.Infof("Extracting image %d…\n", imageIndex)
 
 		// get image header
-		imgHeader, err := readImageHeader(f)
+		blockHeader, err := readBlockHeaderV1(file)
 		if err != nil {
-			log.Fatal(err)
+			return err
 		}
-		log.Debug(imgHeader)
 
-		// get color data
-		chunkLength := int(binary.LittleEndian.Uint32(readSomeBytes(f, 4)))
-		chunkData := readDataChunk(f, chunkLength)
+		// read the color data
+		if b, err := readSomeBytes(file, 4); err != nil {
+			return err
+		} else {
+			chunkLength = int(binary.LittleEndian.Uint32(b))
+		}
+		if chunkData, err = readSomeBytes(file, chunkLength); err != nil {
+			return err
+		}
 
-		// and write it to file
-		// err = ioutil.WriteFile(newColorPath, chunkData, 0644)
-		// if err != nil {
-		// 	log.Fatal(err)
-		// }
-
-		// create reader around the jpeg chunk
+		// create reader around the color data chunk
 		chunkReader := bytes.NewReader(chunkData)
 
 		// load image details without decoding the image
 		colorImageConfig, colorImageFormat, err := image.DecodeConfig(chunkReader)
 		if err != nil {
-			log.Fatal(err)
+			return err
 		}
 
 		log.Debugf("color%d decoded as %s\n", imageIndex, colorImageFormat)
 
 		// if the image is bigger than the arbitrarily set limit, stop
 		if colorImageConfig.Width > MAX_IMAGE_SIZE || colorImageConfig.Height > MAX_IMAGE_SIZE {
-			log.Fatal("Image is larger than 4096 pixels on either the vertical or horizontal axis.")
+			return errors.New("image is larger than 4096 pixels on either the vertical or horizontal axis")
 		}
 
-		// reset reader to the beginning
+		// reset reader to the beginning and actually decode the image
 		chunkReader.Seek(0, io.SeekStart)
+		colorImage, colorImageFormat, err := image.Decode(chunkReader)
 
-		// actually decode the image
-		colorImage, colorImageFormat, err := image.Decode(bytes.NewReader(chunkData))
+		filePos, _ = file.Seek(0, io.SeekCurrent)
+		log.Debugf("Position (after color%d): %d\n", imageIndex, filePos)
 
-		pos, _ := f.Seek(0, io.SeekCurrent)
-		log.Debugf("Position (after color%d): %d\n", imageIndex, pos)
+		// get mask data
+		if b, err := readSomeBytes(file, 4); err != nil {
+			return err
+		} else {
+			chunkLength = int(binary.LittleEndian.Uint32(b))
+		}
+		if chunkData, err = readSomeBytes(file, chunkLength); err != nil {
+			return err
+		}
 
-		// get alpha data
-		chunkLength = int(binary.LittleEndian.Uint32(readSomeBytes(f, 4)))
-		chunkData = readDataChunk(f, chunkLength)
+		filePos, _ = file.Seek(0, io.SeekCurrent)
+		log.Debugf("Position (after alpha%d): %d\n", imageIndex, filePos)
 
-		pos, _ = f.Seek(0, io.SeekCurrent)
-		log.Debugf("Position (after alpha%d): %d\n", imageIndex, pos)
-
+		// decompress mask data and construct an image
 		chunkDataDecompressed, err := decompressZlibData(chunkData)
 		if err != nil {
-			log.Fatal(err)
+			return err
 		}
 
-		alphaImage := imageMaskFromRawData(chunkDataDecompressed, int(imgHeader.Width), int(imgHeader.Height))
-
-		if colorImageConfig.Width != int(imgHeader.Width) || colorImageConfig.Height != int(imgHeader.Height) {
-			log.Fatal("Size mismatch between color image and alpha mask")
+		maskImage := newGrayFromRawData(chunkDataDecompressed, int(blockHeader.Width), int(blockHeader.Height))
+		if colorImageConfig.Width != int(blockHeader.Width) || colorImageConfig.Height != int(blockHeader.Height) {
+			return errors.New("size mismatch between color image and alpha mask")
 		}
 
-		bounds := colorImage.Bounds()
-		rgba := image.NewNRGBA(image.Rect(0, 0, bounds.Dx(), bounds.Dy()))
-		draw.Draw(rgba, bounds, colorImage, bounds.Min, draw.Src)
+		log.Infof("Image %d: %d×%d px", imageIndex, blockHeader.Width, blockHeader.Height)
 
-		for idx, alpha := range alphaImage.Pix {
-			alphaIdx := idx * 4 + 3
+		// convert color image to NRGBA and fill in the mask image's alpha values
+		rgba := imageToNRGBA(colorImage)
+		for idx, alpha := range maskImage.Pix {
+			alphaIdx := idx*4 + 3
 			rgba.Pix[alphaIdx] = alpha
 		}
 
-		outImageFile, err := os.Create(newOutFilePath)
-		if err != nil {
-			log.Fatal(err)
-		}
+		if dryRun {
+			log.Debugf("Dry Run: skipping creation of %s", filepath.Base(newOutFilePath))
+		} else {
+			outImageFile, err := os.Create(newOutFilePath)
+			if err != nil {
+				return err
+			}
 
-		err = pngEnc.Encode(outImageFile, rgba)
-		if err != nil {
-			log.Fatal(err)
-		}
+			err = pngEnc.Encode(outImageFile, rgba)
+			if err != nil {
+				outImageFile.Close()
+				return err
+			}
 
-		if pos == fi.Size() {
-			// EOF has been reached
-			log.Info("All images extracted!")
-			moreImagesAvailable = false
+			outImageFile.Close()
 		}
 
 		imageIndex++
+	}
+
+	log.Info("Done.")
+
+	return nil
+}
+
+func ConvertMTXToPNG(file string, dryRun bool) error {
+	log.Info(file)
+
+	// open file
+	f, err := os.Open(file)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	// get file info and perform preliminary size check
+	fi, err := f.Stat()
+	if err != nil {
+		return errors.New("couldn't get file info")
+	} else if !fi.Mode().IsRegular() {
+		return errors.New("is a directory")
+	} else if fi.Size() < 24 {
+		return errors.New("file is too small to be an MTX file")
+	}
+
+	// parse file header and run the appropriate converter
+	fileVersionBytes, _ := readSomeBytes(f, 4)
+	fileVersion := binary.LittleEndian.Uint32(fileVersionBytes)
+
+	_, _ = f.Seek(0, io.SeekStart)
+
+	switch fileVersion {
+	case 0:
+		log.Debug("Format: MTXv0")
+		if err := HandleMTXv0(f, fi, dryRun); err != nil {
+			return err
+		}
+	case 1:
+		log.Debug("Format: MTXv1")
+		if err := HandleMTXv1(f, fi, dryRun); err != nil {
+			return err
+		}
+	case 2:
+		return errors.New(fmt.Sprintf("Unsupported MTX version 0x%X", fileVersion))
+	default:
+		//return errors.New(fmt.Sprintf("Unsupported MTX version 0x%X", fileVersion))
 	}
 
 	return nil
