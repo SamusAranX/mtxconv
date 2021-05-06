@@ -36,6 +36,19 @@ func decompressZlibData(data []byte) ([]byte, error) {
 	return decompBytes, nil
 }
 
+func compressZlibData(data []byte) ([]byte, error) {
+	var b bytes.Buffer
+	z := zlib.NewWriter(&b)
+	defer z.Close()
+
+	_, err := z.Write(data)
+	if err != nil {
+		return nil, err
+	}
+
+	return b.Bytes(), nil
+}
+
 func imageToNRGBA(img image.Image) *image.NRGBA {
 	bounds := img.Bounds()
 	nrgba := image.NewNRGBA(image.Rect(0, 0, bounds.Dx(), bounds.Dy()))
