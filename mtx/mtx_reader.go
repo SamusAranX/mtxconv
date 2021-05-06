@@ -48,11 +48,11 @@ func HandleMTXv0(file *os.File, fileInfo fs.FileInfo, dryRun bool) error {
 		newOutFilePath := filepath.Join(fileDir, fmt.Sprintf("%s%d.jpg", fileBaseNoExt, imageIndex))
 
 		log.Infof("Extracting image %d…\n", imageIndex)
-
 		if chunkData, err = readSomeBytes(file, length); err != nil {
 			return err
 		}
 
+		// write image data to file
 		if dryRun {
 			log.Debugf("Dry Run: skipping creation of %s", filepath.Base(newOutFilePath))
 		} else {
@@ -180,8 +180,6 @@ func HandleMTXv1(file *os.File, fileInfo fs.FileInfo, dryRun bool) error {
 			return errors.New("size mismatch between color image and alpha mask")
 		}
 
-		log.Infof("Image %d: %d×%d px", imageIndex, blockHeader.Width, blockHeader.Height)
-
 		// convert color image to NRGBA and fill in the mask image's alpha values
 		rgba := imageToNRGBA(colorImage)
 		for idx, alpha := range maskImage.Pix {
@@ -214,6 +212,53 @@ func HandleMTXv1(file *os.File, fileInfo fs.FileInfo, dryRun bool) error {
 	return nil
 }
 
+func HandleMTXv2(file *os.File, fileInfo fs.FileInfo, dryRun bool) error {
+	// read MTX header (immediately discarding it so Go doesn't complain)
+	_, err := readHeaderV2(file)
+	if err != nil {
+		return err
+	}
+
+	pvrtcHeader, err := readPVRTC2Header(file)
+	if err != nil {
+		return err
+	}
+
+	// back up after reading the last header
+	_, _ = file.Seek(-PVRTC2_HEADER_SIZE, io.SeekCurrent)
+
+	// set up paths and file names for later
+	fileDir, fileBase := filepath.Split(file.Name())
+	fileBaseNoExt := strings.Split(fileBase, ".")[0]
+	newOutFilePath := filepath.Join(fileDir, fmt.Sprintf("%s.pvr", fileBaseNoExt))
+
+	log.Info("Extracting image…")
+	chunkData, err := readSomeBytes(file, int(pvrtcHeader.HeaderSize+pvrtcHeader.CompressedDataSize))
+	if err != nil {
+		return err
+	}
+
+	// write image data to file
+	if dryRun {
+		log.Debugf("Dry Run: skipping creation of %s", filepath.Base(newOutFilePath))
+	} else {
+		outImageFile, err := os.Create(newOutFilePath)
+		if err != nil {
+			return err
+		}
+
+		_, err = outImageFile.Write(chunkData)
+		if err != nil {
+			outImageFile.Close()
+			return err
+		}
+
+		outImageFile.Close()
+	}
+
+	return nil
+}
+
 func ConvertMTXToPNG(file string, dryRun bool) error {
 	log.Info(file)
 
@@ -230,7 +275,7 @@ func ConvertMTXToPNG(file string, dryRun bool) error {
 		return errors.New("couldn't get file info")
 	} else if !fi.Mode().IsRegular() {
 		return errors.New("is a directory")
-	} else if fi.Size() < 24 {
+	} else if fi.Size() < 64 { // 64 bytes = MTXv2 and PVRTC2 headers
 		return errors.New("file is too small to be an MTX file")
 	}
 
@@ -252,9 +297,12 @@ func ConvertMTXToPNG(file string, dryRun bool) error {
 			return err
 		}
 	case 2:
-		return errors.New(fmt.Sprintf("Unsupported MTX version 0x%X", fileVersion))
+		log.Debug("Format: MTXv2")
+		if err := HandleMTXv2(f, fi, dryRun); err != nil {
+			return err
+		}
 	default:
-		//return errors.New(fmt.Sprintf("Unsupported MTX version 0x%X", fileVersion))
+		return errors.New(fmt.Sprintf("Unsupported MTX version 0x%X", fileVersion))
 	}
 
 	return nil
