@@ -23,7 +23,7 @@ var (
 	}
 )
 
-func HandleMTXv0(file *os.File, fileInfo fs.FileInfo, dryRun bool) error {
+func extractMTXv0(file *os.File, fileInfo fs.FileInfo, dryRun bool) error {
 	// read MTX header
 	fileHeader, err := readHeaderV0(file)
 	if err != nil {
@@ -81,7 +81,7 @@ func HandleMTXv0(file *os.File, fileInfo fs.FileInfo, dryRun bool) error {
 	return nil
 }
 
-func HandleMTXv1(file *os.File, fileInfo fs.FileInfo, dryRun bool) error {
+func extractMTXv1(file *os.File, fileInfo fs.FileInfo, dryRun bool) error {
 	// set up paths and file names for later
 	fileDir, fileBase := filepath.Split(file.Name())
 	fileBaseNoExt := strings.Split(fileBase, ".")[0]
@@ -212,7 +212,7 @@ func HandleMTXv1(file *os.File, fileInfo fs.FileInfo, dryRun bool) error {
 	return nil
 }
 
-func HandleMTXv2(file *os.File, fileInfo fs.FileInfo, dryRun bool) error {
+func extractMTXv2(file *os.File, dryRun bool) error {
 	// read MTX header (immediately discarding it so Go doesn't complain)
 	_, err := readHeaderV2(file)
 	if err != nil {
@@ -222,6 +222,11 @@ func HandleMTXv2(file *os.File, fileInfo fs.FileInfo, dryRun bool) error {
 	pvrtcHeader, err := readPVRTC2Header(file)
 	if err != nil {
 		return err
+	}
+
+	// make sure the PVR file uses a known format
+	if string(pvrtcHeader.Magic[:]) != "PVR!" {
+		return errors.New("unsupported type of PVR file")
 	}
 
 	// back up after reading the last header
@@ -275,6 +280,8 @@ func ExtractMTXFile(file string, dryRun bool) error {
 		return errors.New("is a directory")
 	} else if fi.Size() < 64 { // 64 bytes = MTXv2 and PVRTC2 headers
 		return errors.New("file is too small to be an MTX file")
+	} else if fi.Size() > MAX_INPUT_FILE_SIZE {
+		return errors.New("file is larger than 1 GiB")
 	}
 
 	// parse file header and run the appropriate converter
@@ -286,17 +293,17 @@ func ExtractMTXFile(file string, dryRun bool) error {
 	switch fileVersion {
 	case 0:
 		log.Debug("Format: MTXv0")
-		if err := HandleMTXv0(f, fi, dryRun); err != nil {
+		if err := extractMTXv0(f, fi, dryRun); err != nil {
 			return err
 		}
 	case 1:
 		log.Debug("Format: MTXv1")
-		if err := HandleMTXv1(f, fi, dryRun); err != nil {
+		if err := extractMTXv1(f, fi, dryRun); err != nil {
 			return err
 		}
 	case 2:
 		log.Debug("Format: MTXv2")
-		if err := HandleMTXv2(f, fi, dryRun); err != nil {
+		if err := extractMTXv2(f, dryRun); err != nil {
 			return err
 		}
 	default:
