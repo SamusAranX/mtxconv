@@ -20,7 +20,8 @@ const (
 
 	PVRTC2_HEADER_SIZE = 52
 
-	MAX_IMAGE_SIZE = 4096
+	MAX_IMAGE_SIZE      = 4096
+	MAX_INPUT_FILE_SIZE = 1073741824 // 1 GiB
 )
 
 // HeaderV0 represents an MTX v0 header, used in Smash Hit, Beyondium, and PinOut
@@ -56,7 +57,7 @@ type HeaderV2 struct {
 	Unknown uint16 // appears to always be 256
 }
 
-// PVRTC2Header represents the header of a PVR file. See also https://downloads.isee.biz/pub/files/igep-dsp-gst-framework-3_40_00/Graphics_SDK_4_05_00_03/GFX_Linux_SDK/OVG/SDKPackage/Utilities/PVRTexTool/Documentation/PVRTexTool.Reference%20Manual.1.11f.External.pdf
+// PVRTC2Header represents the header of a PVRTC2 file. See also https://downloads.isee.biz/pub/files/igep-dsp-gst-framework-3_40_00/Graphics_SDK_4_05_00_03/GFX_Linux_SDK/OVG/SDKPackage/Utilities/PVRTexTool/Documentation/PVRTexTool.Reference%20Manual.1.11f.External.pdf
 type PVRTC2Header struct {
 	HeaderSize         uint32
 	Height             uint32
@@ -69,7 +70,7 @@ type PVRTC2Header struct {
 	BitMaskG           uint32
 	BitMaskB           uint32
 	BitMaskA           uint32
-	Magic              uint32
+	Magic              [4]byte
 	NumSurfaces        uint32
 }
 
