@@ -9,39 +9,25 @@ import (
 /*
 The following header sizes are Known™ so I'm hardcoding them
 A dynamic (instead of constant) way to obtain struct sizes would be
-int(reflect.TypeOf(HeaderV0{}).Size())
+int(reflect.TypeOf(HeaderV0V1{}).Size())
 */
 const (
-	HEADER_V0_SIZE = 12
-	HEADER_V1_SIZE = 12
-	HEADER_V2_SIZE = 6
+	HEADER_V0V1_SIZE = 12
+	HEADER_V2_SIZE   = 6
 
 	BLOCK_HEADER_V1_SIZE = 12
 
 	PVRTC2_HEADER_SIZE = 52
 
-	MAX_IMAGE_SIZE      = 4096
+	MAX_IMAGE_BOUNDS    = 4096       // 4 KiB
 	MAX_INPUT_FILE_SIZE = 1073741824 // 1 GiB
 )
 
-// HeaderV0 represents an MTX v0 header, used in Smash Hit, Beyondium, and PinOut
-type HeaderV0 struct {
-	Magic             uint32
-	FirstImageLength  uint32
-	SecondImageLength uint32
-}
-
-// HeaderV1 represents an MTX v1 header, used in Smash Hit, Beyondium, Does Not Commute, and PinOut
-type HeaderV1 struct {
-	Magic             uint32
-	SecondBlockOffset uint32
-
-	/*
-		this is probably something different,
-		but I'm calling it SizeCheck because it
-		doesn't seem to have another purpose
-	*/
-	SizeCheck uint32
+// HeaderV0V1 represents a MTX v0 and v1 headers
+type HeaderV0V1 struct {
+	Magic        uint32
+	LengthFirst  uint32
+	LengthSecond uint32
 }
 
 // BlockHeaderV1 represents the header structure of image/mask blocks in MTXv1 files
@@ -51,7 +37,7 @@ type BlockHeaderV1 struct {
 	Height uint32
 }
 
-// HeaderV2 represents an MTX v2 header, used in Does Not Commute and PinOut
+// HeaderV2 represents an MTX v2 header
 type HeaderV2 struct {
 	Magic   uint32
 	Unknown uint16 // appears to always be 256
@@ -74,26 +60,10 @@ type PVRTC2Header struct {
 	NumSurfaces        uint32
 }
 
-func readHeaderV0(file *os.File) (HeaderV0, error) {
-	header := HeaderV0{}
+func readHeaderV0V1(file *os.File) (HeaderV0V1, error) {
+	header := HeaderV0V1{}
 
-	if headerData, err := readSomeBytes(file, HEADER_V0_SIZE); err != nil {
-		return header, err
-	} else {
-		headerBuf := bytes.NewBuffer(headerData)
-		err := binary.Read(headerBuf, binary.LittleEndian, &header)
-		if err != nil {
-			return header, err
-		}
-	}
-
-	return header, nil
-}
-
-func readHeaderV1(file *os.File) (HeaderV1, error) {
-	header := HeaderV1{}
-
-	if headerData, err := readSomeBytes(file, HEADER_V1_SIZE); err != nil {
+	if headerData, err := readSomeBytes(file, HEADER_V0V1_SIZE); err != nil {
 		return header, err
 	} else {
 		headerBuf := bytes.NewBuffer(headerData)

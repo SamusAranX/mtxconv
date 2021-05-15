@@ -38,22 +38,18 @@ func decompressZlibData(data []byte) ([]byte, error) {
 
 func compressZlibData(data []byte) ([]byte, error) {
 	var b bytes.Buffer
-	z := zlib.NewWriter(&b)
-	defer z.Close()
+	z, err := zlib.NewWriterLevel(&b, zlib.BestCompression)
+	if err != nil {
+		return nil, err
+	}
 
-	_, err := z.Write(data)
+	_, err = z.Write(data)
+	z.Close()
 	if err != nil {
 		return nil, err
 	}
 
 	return b.Bytes(), nil
-}
-
-func imageToNRGBA(img image.Image) *image.NRGBA {
-	bounds := img.Bounds()
-	nrgba := image.NewNRGBA(image.Rect(0, 0, bounds.Dx(), bounds.Dy()))
-	draw.Draw(nrgba, bounds, img, bounds.Min, draw.Src)
-	return nrgba
 }
 
 func newGrayFromRawData(data []byte, width int, height int) *image.Gray {
@@ -63,4 +59,32 @@ func newGrayFromRawData(data []byte, width int, height int) *image.Gray {
 	})
 	img.Pix = data
 	return img
+}
+
+func imageToNRGBA(img image.Image) *image.NRGBA {
+	bounds := img.Bounds()
+	nrgba := image.NewNRGBA(image.Rect(0, 0, bounds.Dx(), bounds.Dy()))
+	draw.Draw(nrgba, bounds, img, bounds.Min, draw.Src)
+	return nrgba
+}
+
+func getAlphaChannel(img *image.NRGBA) []byte {
+	capacity := len(img.Pix) / 4
+	alpha := make([]byte, capacity)
+
+	for i := 0; i < capacity; i++ {
+		alphaIdx := i*4 + 3
+		alpha[i] = img.Pix[alphaIdx]
+	}
+
+	return alpha
+}
+
+func makeAlphaChannelOpaque(rgba *image.NRGBA) {
+	capacity := len(rgba.Pix) / 4
+
+	for i := 0; i < capacity; i++ {
+		alphaIdx := i*4 + 3
+		rgba.Pix[alphaIdx] = 0xFF
+	}
 }

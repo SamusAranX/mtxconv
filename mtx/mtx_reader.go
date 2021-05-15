@@ -25,7 +25,7 @@ var (
 
 func extractMTXv0(file *os.File, fileInfo fs.FileInfo, dryRun bool) error {
 	// read MTX header
-	fileHeader, err := readHeaderV0(file)
+	fileHeader, err := readHeaderV0V1(file)
 	if err != nil {
 		return err
 	}
@@ -37,12 +37,17 @@ func extractMTXv0(file *os.File, fileInfo fs.FileInfo, dryRun bool) error {
 	// variables for use in the loop
 	var chunkData []byte
 	blockLengths := [2]int{
-		int(fileHeader.FirstImageLength),
-		int(fileHeader.SecondImageLength),
+		int(fileHeader.LengthFirst),
+		int(fileHeader.LengthSecond),
 	}
 
 	for i, length := range blockLengths {
 		imageIndex := i + 1
+
+		if length == 0 {
+			log.Infof("Skipping image %d (no data)\n", imageIndex)
+			continue
+		}
 
 		// create new file path
 		newOutFilePath := filepath.Join(fileDir, fmt.Sprintf("%s%d.jpg", fileBaseNoExt, imageIndex))
@@ -90,14 +95,9 @@ func extractMTXv1(file *os.File, fileInfo fs.FileInfo, dryRun bool) error {
 	fileSize := fileInfo.Size()
 
 	// read MTX header
-	fileHeader, err := readHeaderV1(file)
+	_, err := readHeaderV0V1(file)
 	if err != nil {
 		return err
-	}
-
-	// do (optional?) size check
-	if fileSize-12 != int64(fileHeader.SecondBlockOffset+fileHeader.SizeCheck) {
-		return errors.New("size verification failed")
 	}
 
 	// setting up variables that are gonna be reused throughout the loop
@@ -145,8 +145,10 @@ func extractMTXv1(file *os.File, fileInfo fs.FileInfo, dryRun bool) error {
 		log.Debugf("color%d decoded as %s\n", imageIndex, colorImageFormat)
 
 		// if the image is bigger than the arbitrarily set limit, stop
-		if colorImageConfig.Width > MAX_IMAGE_SIZE || colorImageConfig.Height > MAX_IMAGE_SIZE {
+		if colorImageConfig.Width > MAX_IMAGE_BOUNDS || colorImageConfig.Height > MAX_IMAGE_BOUNDS {
 			return errors.New("image is larger than 4096 pixels on either the vertical or horizontal axis")
+		} else if colorImageConfig.Width != int(blockHeader.Width) || colorImageConfig.Height != int(blockHeader.Height) {
+			return errors.New("image/header dimension mismatch detected")
 		}
 
 		// reset reader to the beginning and actually decode the image
