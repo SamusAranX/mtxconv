@@ -177,8 +177,12 @@ func createMTXv2(inFile *os.File, outFilePath string, dryRun bool) error {
 		return err
 	}
 
-	binary.Write(f, binary.LittleEndian, fileHeader)
-	f.Write(inFileContents)
+	if dryRun {
+		log.Debugf("Dry Run: skipping creation of %s", filepath.Base(outFilePath))
+	} else {
+		binary.Write(f, binary.LittleEndian, fileHeader)
+		f.Write(inFileContents)
+	}
 
 	return nil
 }
@@ -201,13 +205,14 @@ func CreateMTXFile(file string, mtxTargetVersion int, jpegQuality int, dryRun bo
 			mtxTargetVersion = 0
 		}
 		if mtxTargetVersion == 2 {
-			return errors.New("JPG files are only supported with MTX target versions 0 or 1")
+			return errors.New("JPEG files are only supported with MTX target version 0 or 1")
 		}
 	} else if fileExt == "png" {
 		if mtxTargetVersion == -1 {
 			mtxTargetVersion = 1
 		}
-		if mtxTargetVersion != 1 {
+
+		if mtxTargetVersion == 2 {
 			return errors.New("PNG files are only supported with MTX target version 0 or 1")
 		}
 	} else if fileExt == "pvr" {
