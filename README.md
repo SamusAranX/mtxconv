@@ -96,6 +96,7 @@ With a hex editor and a trained eye, it's possible to extract JPEG files by hand
 ### Example File
 
 ![Crop of the Smash Hit / PinOut vinyl album art](examples/smashhitlp.png)
+
 Crop of the Smash Hit / PinOut vinyl album art
 
 [Download the MTX version](examples/smashhitlp.png.mtx)
@@ -147,6 +148,7 @@ This structure is unique to MTXv1 and precedes every color/mask data block. Widt
 ### Example File
 
 ![The PinOut logo](examples/pinoutlogo.png)
+
 The PinOut logo, taken from the PinOut press kit
 
 [Download the MTX version](examples/pinoutlogo.png.mtx)
@@ -171,6 +173,7 @@ mtxconv parses this header to determine how much data to extract in order to wri
 ### Example File
 
 ![A generic test card](examples/testcard.png)
+
 A generic "test card" image
 
 [Download the MTX version](examples/testcard.pvr.mtx)
