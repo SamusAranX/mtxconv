@@ -7,9 +7,8 @@ import (
 	"fmt"
 	"github.com/disintegration/imaging"
 	log "github.com/sirupsen/logrus"
-	"image"
 	"image/jpeg"
-	"io/ioutil"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -18,12 +17,6 @@ import (
 var (
 	jpegOpts *jpeg.Options = nil
 )
-
-func placeholder(stuff ...interface{}) {}
-
-func getEncodedBuffers(img image.Image) {
-	// TODO: move JPEG generation of normal and scaled buffers here
-}
 
 func createMTXv0(inFile *os.File, outFilePath string, dryRun bool) error {
 	img, err := imaging.Open(inFile.Name())
@@ -172,7 +165,7 @@ func createMTXv2(inFile *os.File, outFilePath string, dryRun bool) error {
 	}
 	defer f.Close()
 
-	inFileContents, err := ioutil.ReadAll(inFile)
+	inFileContents, err := io.ReadAll(inFile)
 	if err != nil {
 		return err
 	}
@@ -266,8 +259,6 @@ func CreateMTXFile(file string, mtxTargetVersion int, jpegQuality int, dryRun bo
 	default:
 		return errors.New("this isn't supposed to happen. please report this")
 	}
-
-	placeholder("TODO: Implement this", newOutFilePath)
 
 	return nil
 }

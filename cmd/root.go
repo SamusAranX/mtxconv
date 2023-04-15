@@ -24,6 +24,8 @@ func Execute() {
 func init() {
 	cobra.OnInitialize()
 
+	rootCmd.CompletionOptions.DisableDefaultCmd = true
+
 	rootCmd.PersistentFlags().BoolVarP(&debugModeEnabled, "debug", "", false, "debug")
 	rootCmd.PersistentFlags().BoolVarP(&dryRunEnabled, "dry-run", "", false, "disables writing of output files. useful for testing")
 }

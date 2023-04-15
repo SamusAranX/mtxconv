@@ -19,7 +19,7 @@ const (
 // bakeCmd represents the tomtx command
 var bakeCmd = &cobra.Command{
 	Use:   "bake [image files]",
-	Short: "Convert images to MTX (not implemented yet)",
+	Short: "Convert images to MTX",
 
 	Args: cobra.MinimumNArgs(1),
 

@@ -1,10 +1,16 @@
 module mtxconv
 
-go 1.16
+go 1.20
 
 require (
-	github.com/disintegration/imaging v1.6.2 // indirect
-	github.com/sirupsen/logrus v1.8.1 // indirect
-	github.com/spf13/cobra v1.1.3 // indirect
-	golang.org/x/image v0.0.0-20210504121937-7319ad40d33e // indirect
+	github.com/disintegration/imaging v1.6.2
+	github.com/sirupsen/logrus v1.9.0
+	github.com/spf13/cobra v1.7.0
+)
+
+require (
+	github.com/inconshreveable/mousetrap v1.1.0 // indirect
+	github.com/spf13/pflag v1.0.5 // indirect
+	golang.org/x/image v0.7.0 // indirect
+	golang.org/x/sys v0.7.0 // indirect
 )

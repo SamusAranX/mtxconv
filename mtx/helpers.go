@@ -5,19 +5,19 @@ import (
 	"compress/zlib"
 	"image"
 	"image/draw"
-	"io/ioutil"
+	"io"
 	"os"
 )
 
 func readSomeBytes(file *os.File, number int) ([]byte, error) {
-	bytes := make([]byte, number)
+	b := make([]byte, number)
 
-	_, err := file.Read(bytes)
+	_, err := file.Read(b)
 	if err != nil {
 		return nil, err
 	}
 
-	return bytes, nil
+	return b, nil
 }
 
 func decompressZlibData(data []byte) ([]byte, error) {
@@ -28,7 +28,7 @@ func decompressZlibData(data []byte) ([]byte, error) {
 	}
 	defer z.Close()
 
-	decompBytes, err := ioutil.ReadAll(z)
+	decompBytes, err := io.ReadAll(z)
 	if err != nil {
 		return nil, err
 	}
