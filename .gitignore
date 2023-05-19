@@ -1,6 +1,9 @@
 # the binaries themselves
-/mtxconv
-/mtxconv.exe
+/mtxconv*
+
+# garbage
+Thumbs.db
+.DS_Store
 
 # test directory
 /test
